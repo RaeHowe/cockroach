@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -91,6 +92,8 @@ type tableInserter struct {
 	// Set by init.
 	txn *client.Txn
 	b   *client.Batch
+
+	insertType InsertType
 }
 
 func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
@@ -98,6 +101,9 @@ func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr parser.Ty
 func (ti *tableInserter) init(txn *client.Txn) error {
 	ti.txn = txn
 	ti.b = txn.NewBatch()
+	if ti.insertType == NoIntentTracking {
+		ti.b.Header.TxnCoordSenderIgnoreIntents = true
+	}
 	return nil
 }
 
@@ -107,13 +113,38 @@ func (ti *tableInserter) row(ctx context.Context, values parser.Datums) (parser.
 
 func (ti *tableInserter) finalize(ctx context.Context) error {
 	var err error
+	desc := ti.ri.Helper.TableDesc
+	tableStartKey := roachpb.Key(keys.MakeTablePrefix(uint32(desc.ID)))
+	tableEndKey := roachpb.Key(keys.MakeTablePrefix(uint32(desc.ID + 1)))
+	intentSpan := roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}
 	if ti.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
-		err = ti.txn.CommitInBatch(ctx, ti.b)
+		if ti.insertType == NoIntentTracking {
+			err = ti.txn.CommitInBatchWithIntentSpan(ctx, ti.b, intentSpan)
+		} else {
+			err = ti.txn.CommitInBatch(ctx, ti.b)
+		}
 	} else {
 		err = ti.txn.Run(ctx, ti.b)
+		if ti.insertType == NoIntentTracking {
+			// In the NoIntentTracking case, the batch we just ran didn't record any
+			// intents in the TxnCoordSender. We'll send a RecordIntentsRequest to
+			// compensate for that.
+			recordIntentsBatch := ti.txn.NewBatch()
+			et := &roachpb.RecordIntentsRequest{
+				IntentSpans: []roachpb.Span{intentSpan},
+			}
+			recordIntentsBatch.AddRawRequest(et)
+			errRecIntents := ti.txn.Run(ctx, recordIntentsBatch)
+			if errRecIntents != nil {
+				log.Errorf(ctx, "error recording intents: %s", errRecIntents)
+				if err == nil {
+					err = errRecIntents
+				}
+			}
+		}
 	}
 
 	if err != nil {

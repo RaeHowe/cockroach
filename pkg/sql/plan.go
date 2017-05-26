@@ -323,7 +323,7 @@ func (p *planner) newPlan(
 	case *parser.Help:
 		return p.Help(ctx, n)
 	case *parser.Insert:
-		return p.Insert(ctx, n, desiredTypes)
+		return p.Insert(ctx, n, desiredTypes, RegularInsert)
 	case *parser.ParenSelect:
 		return p.newPlan(ctx, n.Select, desiredTypes)
 	case *parser.Relocate:
@@ -410,7 +410,7 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	case *parser.Help:
 		return p.Help(ctx, n)
 	case *parser.Insert:
-		return p.Insert(ctx, n, nil)
+		return p.Insert(ctx, n, nil, RegularInsert)
 	case *parser.Select:
 		return p.Select(ctx, n, nil)
 	case *parser.SelectClause:

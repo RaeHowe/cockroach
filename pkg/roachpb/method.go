@@ -59,6 +59,7 @@ const (
 	BeginTransaction
 	// EndTransaction either commits or aborts an ongoing transaction.
 	EndTransaction
+	RecordIntents
 	// AdminSplit is called to coordinate a split of a range.
 	AdminSplit
 	// AdminMerge is called to coordinate a merge of two adjacent ranges.

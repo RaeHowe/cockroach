@@ -727,7 +727,8 @@ func (n *createTableNode) Start(ctx context.Context) error {
 			Rows:      n.n.AsSource,
 			Returning: parser.AbsentReturningClause,
 		}
-		insertPlan, err := n.p.Insert(ctx, insert, nil /* desiredTypes */)
+		// We'll use the NoIntentTracking optimization since this is a new table.
+		insertPlan, err := n.p.Insert(ctx, insert, nil /* desiredTypes */, NoIntentTracking)
 		if err != nil {
 			return err
 		}

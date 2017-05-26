@@ -325,6 +325,29 @@ func (tc *TxnCoordSender) Send(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	ctx = tc.AnnotateCtx(ctx)
 
+	// Handle the RecordIntents request. That's a special request not meant to be
+	// passed further than the TxnCoordSender.
+	if len(ba.Requests) == 1 &&
+		ba.Requests[0].GetInner().Method() == roachpb.RecordIntents {
+		union := roachpb.ResponseUnion{}
+		union.MustSetInner(&roachpb.NoopResponse{})
+		br := &roachpb.BatchResponse{
+			Responses: []roachpb.ResponseUnion{union},
+		}
+
+		txnMeta, ok := tc.txnMu.txns[*ba.Txn.ID]
+		if !ok {
+			// This transaction didn't previously perform any writes, so it's
+			// pointless to record any intents for it.
+			return br, nil
+		}
+		tc.txnMu.Lock()
+		ri := ba.Requests[0].GetInner().(*roachpb.RecordIntentsRequest)
+		txnMeta.keys = append(txnMeta.keys, ri.IntentSpans...)
+		tc.txnMu.Unlock()
+		return br, nil
+	}
+
 	// Start new or pick up active trace. From here on, there's always an active
 	// Trace, though its overhead is small unless it's sampled.
 	sp := opentracing.SpanFromContext(ctx)
@@ -366,12 +389,6 @@ func (tc *TxnCoordSender) Send(
 					return nil, roachpb.NewErrorf("EndTransaction must not have a Key set")
 				}
 				et.Key = ba.Txn.Key
-				if len(et.IntentSpans) > 0 {
-					// TODO(tschottdorf): it may be useful to allow this later.
-					// That would be part of a possible plan to allow txns which
-					// write on multiple coordinators.
-					return nil, roachpb.NewErrorf("client must not pass intents to EndTransaction")
-				}
 			}
 		}
 
@@ -392,23 +409,25 @@ func (tc *TxnCoordSender) Send(
 			txnMeta := tc.txnMu.txns[txnID]
 			distinctSpans := true
 			if txnMeta != nil {
-				et.IntentSpans = txnMeta.keys
+				et.IntentSpans = append(et.IntentSpans, txnMeta.keys...)
 				// Defensively set distinctSpans to false if we had any previous
 				// requests in this transaction. This effectively limits the distinct
 				// spans optimization to 1pc transactions.
 				distinctSpans = len(txnMeta.keys) == 0
 			}
-			// We can't pass in a batch response here to better limit the key
-			// spans as we don't know what is going to be affected. This will
-			// affect queries such as `DELETE FROM my.table LIMIT 10` when
-			// executed as a 1PC transaction. e.g.: a (BeginTransaction,
-			// DeleteRange, EndTransaction) batch.
-			ba.IntentSpanIterate(nil, func(key, endKey roachpb.Key) {
-				et.IntentSpans = append(et.IntentSpans, roachpb.Span{
-					Key:    key,
-					EndKey: endKey,
+			if !ba.TxnCoordSenderIgnoreIntents {
+				// We can't pass in a batch response here to better limit the key
+				// spans as we don't know what is going to be affected. This will
+				// affect queries such as `DELETE FROM my.table LIMIT 10` when
+				// executed as a 1PC transaction. e.g.: a (BeginTransaction,
+				// DeleteRange, EndTransaction) batch.
+				ba.IntentSpanIterate(nil, func(key, endKey roachpb.Key) {
+					et.IntentSpans = append(et.IntentSpans, roachpb.Span{
+						Key:    key,
+						EndKey: endKey,
+					})
 				})
-			})
+			}
 			// TODO(peter): Populate DistinctSpans on all batches, not just batches
 			// which contain an EndTransactionRequest.
 			var distinct bool
@@ -942,12 +961,14 @@ func (tc *TxnCoordSender) updateState(
 		if txnMeta != nil {
 			keys = txnMeta.keys
 		}
-		ba.IntentSpanIterate(br, func(key, endKey roachpb.Key) {
-			keys = append(keys, roachpb.Span{
-				Key:    key,
-				EndKey: endKey,
+		if !ba.TxnCoordSenderIgnoreIntents {
+			ba.IntentSpanIterate(br, func(key, endKey roachpb.Key) {
+				keys = append(keys, roachpb.Span{
+					Key:    key,
+					EndKey: endKey,
+				})
 			})
-		})
+		}
 
 		if int64(len(keys)) > maxIntents.Get() {
 			// This check comes after the new intents have already been
@@ -959,7 +980,7 @@ func (tc *TxnCoordSender) updateState(
 
 		if txnMeta != nil {
 			txnMeta.keys = keys
-		} else if len(keys) > 0 {
+		} else if len(keys) > 0 || ba.TxnCoordSenderIgnoreIntents {
 			// If the transaction is already over, there's no point in
 			// launching a one-off coordinator which will shut down right
 			// away. If we ended up here with an error, we'll always start
@@ -997,7 +1018,6 @@ func (tc *TxnCoordSender) updateState(
 			}
 		}
 	}
-
 	// Update our record of this transaction, even on error.
 	if txnMeta != nil {
 		txnMeta.txn.Update(&newTxn)

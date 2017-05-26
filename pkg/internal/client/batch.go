@@ -232,6 +232,9 @@ func (b *Batch) fillResults() error {
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
 				}
 
+			case *roachpb.RecordIntentsRequest:
+				// nothing to do. This request has an empty result.
+
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",

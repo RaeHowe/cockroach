@@ -486,6 +486,21 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	return txn.Run(ctx, b)
 }
 
+// CommitInBatchWithIntentSpan is like CommitInBatch, except that an IntentSpan
+// is set in the EndTransactionRequest. This is used when at least some of the
+// batches in the transaction had TxnCoordSenderIgnoreIntents set.
+func (txn *Txn) CommitInBatchWithIntentSpan(
+	ctx context.Context, b *Batch, intentSpan roachpb.Span,
+) error {
+	if txn != b.txn {
+		return errors.Errorf("a batch b can only be committed by b.txn")
+	}
+	et := endTxnReq(true /* commit */, txn.deadline, txn.systemConfigTrigger)
+	et.(*roachpb.EndTransactionRequest).IntentSpans = []roachpb.Span{intentSpan}
+	b.AddRawRequest(et)
+	return txn.Run(ctx, b)
+}
+
 // CommitOrCleanup sends an EndTransactionRequest with Commit=true.
 // If that fails, an attempt to rollback is made.
 // txn should not be used to send any more commands after this call.

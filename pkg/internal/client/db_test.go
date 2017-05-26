@@ -379,6 +379,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "AcceptUnhandledRetryableErrors"}:  {},
 		{txnType, "Commit"}:                          {},
 		{txnType, "CommitInBatch"}:                   {},
+		{txnType, "CommitInBatchWithIntentSpan"}:     {},
 		{txnType, "CommitOrCleanup"}:                 {},
 		{txnType, "Rollback"}:                        {},
 		{txnType, "CleanupOnError"}:                  {},

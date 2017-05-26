@@ -381,7 +381,7 @@ func (p *planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, erro
 		},
 		Returning: parser.AbsentReturningClause,
 	}
-	return p.Insert(ctx, &in, nil)
+	return p.Insert(ctx, &in, nil, RegularInsert)
 }
 
 // Format implements the NodeFormatter interface.

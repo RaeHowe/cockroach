@@ -283,6 +283,11 @@ message EndTransactionRequest {
   optional bool require_1pc = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "Require1PC"];
 }
 
+message RecordIntentsRequest {
+  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated Span intent_spans = 2 [(gogoproto.nullable) = false];
+}
+
 // An EndTransactionResponse is the return value from the
 // EndTransaction() method. The final transaction record is returned
 // as part of the response header. In particular, transaction status
@@ -908,6 +913,7 @@ message RequestUnion {
   optional ImportRequest import = 34;
   optional QueryTxnRequest query_txn = 33;
   optional AdminScatterRequest admin_scatter = 36;
+  optional RecordIntentsRequest record_intents = 37;
 }
 
 // A ResponseUnion contains exactly one of the optional responses.
@@ -1018,6 +1024,15 @@ message Header {
   // gateway_node_id is the ID of the gateway node where the request originated.
   optional int32 gateway_node_id = 11 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
+  // If set, the TxnCoordSender will not do its regular job of keeping track of
+  // intents laid down by write requests in this batch. This can be used when
+  // the client wants to take upon itself the job of tracking intents -
+  // presumably because it knows how to group them into a few key spans.
+  //
+  // This should only be used for transactional requests. The client should
+  // either fill in the IntentSpans on the EndTransaction or should send a
+  // RecordIntentsRequest.
+  optional bool txn_coord_sender_ignore_intents = 12 [(gogoproto.nullable) = false];
 }
 
 

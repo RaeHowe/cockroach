@@ -48,12 +48,32 @@ type insertNode struct {
 	}
 }
 
+// InsertType differentiates between different behaviours of an Insert planNode.
+type InsertType bool
+
+const (
+	// RegularInsert activates the default behaviour.
+	RegularInsert InsertType = false
+	// NoIntentTracking will cause the Insert node to ask the TxnCoordSender to
+	// not track the intents produced by its write batches. Instead, the node will
+	// manually inform the TxnCoordSender of a single intent range, equal to the
+	// whole key span of the table's PK. This is useful for going around
+	// limitations on the maximum number of intents that a txn can accumulate and
+	// works well when the table did not have any data previous to the insert.
+	// This is used for CREATE TABLE AS SELECT... statements.
+	//
+	// ATTENTION: Do not use this on tables with secondary indexes; intents on
+	// those will not be cleaned up properly, resulting on writes to those indexes
+	// being dropped.
+	NoIntentTracking InsertType = true
+)
+
 // Insert inserts rows into the database.
 // Privileges: INSERT on table. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
-	ctx context.Context, n *parser.Insert, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.Insert, desiredTypes []parser.Type, insertType InsertType,
 ) (planNode, error) {
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
@@ -139,7 +159,7 @@ func (p *planner) Insert(
 
 	var tw tableWriter
 	if n.OnConflict == nil {
-		tw = &tableInserter{ri: ri, autoCommit: p.autoCommit}
+		tw = &tableInserter{ri: ri, autoCommit: p.autoCommit, insertType: insertType}
 	} else {
 		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.InsertCols)
 		if err != nil {
