@@ -60,7 +60,7 @@ func genFile(numRows int, rowSize int) {
 		check(err)
 	}
 	w.Flush()
-	log.Infof(context.TODO(), "finished writing to fil.")
+	log.Infof(context.TODO(), "finished writing to file.")
 	os.Stderr.WriteString("done\n")
 	// sort -k1n --numeric-sort --parallel=<n> --output=<file>
 	// -nk1.6,1.8 -s
@@ -113,6 +113,9 @@ func writeToRocksDB(numRows int, rowSize int, rocksdbPath string) error {
 		return err
 	}
 	defer func() {
+		stats, err := r.GetStats()
+		check(err)
+		log.Infof(context.TODO(), "rocks final stats: %+v", stats)
 		r.Close()
 		os.RemoveAll(rocksdbPath)
 		os.Mkdir(rocksdbPath, 0700)
