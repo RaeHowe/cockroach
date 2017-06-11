@@ -30,6 +30,7 @@ func check(e error) {
 
 func main() {
 	chunked := flag.Bool("chunked", false, "do chunked sort")
+	sortConcurrency := flag.Int("sort_concurrency", 5, "how many sorts in parallel")
 	tmpPath := flag.String("tmp_path", "/tmp/bench", "")
 
 	useRocksDB := flag.Bool("rocksdb", false, "use rocksdb")
@@ -40,7 +41,7 @@ func main() {
 	flag.Parse()
 
 	if *chunked {
-		streamSort(*numRowsPtr, *rowSizePtr, *tmpPath)
+		streamSort(*numRowsPtr, *rowSizePtr, *tmpPath, *sortConcurrency)
 	} else if *useRocksDB {
 		check(writeToRocksDB(*numRowsPtr, *rowSizePtr, *rocksdbPath))
 	} else if *readFile == "" {
@@ -181,12 +182,14 @@ func writeToRocksDB(numRows int, rowSize int, rocksdbPath string) error {
 	return nil
 }
 
-func streamSort(numRows int, rowSize int, tmpPath string) {
+func streamSort(numRows int, rowSize int, tmpPath string, sortConcurrency int) {
 	log.Infof(context.TODO(), "starting writing chunks.")
+	sem = make(chan struct{}, sortConcurrency)
+
 	rowData := randBytes(rowSize)
 	rowData[len(rowData)-1] = '\n'
 
-	sortLimitMB := 370 / maxConcurrency
+	sortLimitMB := 370 / sortConcurrency
 	curChunkFile, curChunkPath := makeChunkFile(tmpPath, chunkNum)
 	w := bufio.NewWriter(curChunkFile)
 	for i := 0; i < numRows; i++ {
@@ -196,7 +199,7 @@ func streamSort(numRows int, rowSize int, tmpPath string) {
 		_, err := w.Write(rowData)
 		check(err)
 
-		if i != 0 && i%1000000 == 0 {
+		if i != 0 && i%2000000 == 0 {
 			w.Flush()
 			log.Infof(context.TODO(), "starting sort of chunk: %d", chunkNum)
 			startChunkSort(chunkNum, curChunkPath, tmpPath, sortLimitMB)
@@ -212,11 +215,9 @@ func streamSort(numRows int, rowSize int, tmpPath string) {
 	chunkWait.Wait()
 }
 
-const maxConcurrency = 5
-
 var chunkNum = 0
 var chunkWait sync.WaitGroup
-var sem = make(chan struct{}, maxConcurrency)
+var sem chan struct{}
 var stopper = stop.NewStopper()
 
 func makeChunkFileName(tmpPath string, chunkNum int) string {
