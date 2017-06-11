@@ -241,7 +241,7 @@ func startChunkSort(chunkNum int, chunkPath string, tmpPath string, memLimitMB i
 				"--parallel=1",
 				"-k1.1,1.15",
 				"-s",
-				fmt.Sprintf("--output=%s/sorted-chunk-%s", tmpPath, chunkNum),
+				fmt.Sprintf("--output=%s/sorted-chunk-%d", tmpPath, chunkNum),
 				chunkPath)
 			check(cmd.Start())
 			check(cmd.Wait())
