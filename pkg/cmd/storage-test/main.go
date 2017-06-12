@@ -8,7 +8,6 @@ import (
 	"io"
 	"math/rand"
 	"os"
-	"os/exec"
 	"strconv"
 	"sync"
 
@@ -252,16 +251,17 @@ func startChunkSort(chunkNum int, chunkPath string, tmpPath string, memLimitMB i
 
 	if err := stopper.RunLimitedAsyncTask(context.TODO(), sem, true, /* wait */
 		func(context.Context) {
-			cmd := exec.Command("sort",
-				"-S", fmt.Sprintf("%dM", memLimitMB),
-				"-T", tmpPath,
-				"--parallel=1",
-				"-k1.1,1.15",
-				"-s",
-				fmt.Sprintf("--output=%s/sorted-chunk-%d", tmpPath, chunkNum),
-				chunkPath)
-			check(cmd.Start())
-			check(cmd.Wait())
+			// !!!
+			// cmd := exec.Command("sort",
+			//   "-S", fmt.Sprintf("%dM", memLimitMB),
+			//   "-T", tmpPath,
+			//   "--parallel=1",
+			//   "-k1.1,1.15",
+			//   "-s",
+			//   fmt.Sprintf("--output=%s/sorted-chunk-%d", tmpPath, chunkNum),
+			//   chunkPath)
+			// check(cmd.Start())
+			// check(cmd.Wait())
 			log.Infof(context.TODO(), "finished sorting of chunk: %d", chunkNum)
 			check(os.Remove(chunkPath))
 			chunkWait.Done()
