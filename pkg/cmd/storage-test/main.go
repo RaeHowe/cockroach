@@ -215,11 +215,13 @@ func streamSort(
 			log.Infof(context.TODO(), "starting sort of chunk: %d", chunkNum)
 			startChunkSort(chunkNum, curChunkPath, tmpPath, sortLimitMB)
 			chunkNum++
+			curChunkFile.Close()
 			curChunkFile, curChunkPath = makeChunkFile(tmpfsPath, tmpPath, chunkNum)
 			w = bufio.NewWriter(curChunkFile)
 		}
 	}
 	w.Flush()
+	curChunkFile.Close()
 	log.Infof(context.TODO(), "starting sort of final chunk: %d", chunkNum)
 	startChunkSort(chunkNum, curChunkPath, tmpPath, sortLimitMB)
 	log.Infof(context.TODO(), "finished writing chunks. Waiting for all sorts to finish.")
