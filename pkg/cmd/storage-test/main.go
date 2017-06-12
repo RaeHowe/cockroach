@@ -261,8 +261,9 @@ func startChunkSort(chunkNum int, chunkPath string, tmpPath string, memLimitMB i
 				chunkPath)
 			check(cmd.Start())
 			check(cmd.Wait())
-			chunkWait.Done()
 			log.Infof(context.TODO(), "finished sorting of chunk: %d", chunkNum)
+			check(os.Remove(chunkPath))
+			chunkWait.Done()
 		}); err != nil {
 		check(err)
 	}
