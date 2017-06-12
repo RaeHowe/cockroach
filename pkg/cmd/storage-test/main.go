@@ -200,6 +200,7 @@ func streamSort(
 	rowData := randBytes(rowSize)
 	rowData[len(rowData)-1] = '\n'
 
+	sortLimitMB = sortLimitMB / sortConcurrency
 	curChunkFile, curChunkPath := makeChunkFile(tmpfsPath, tmpPath, chunkNum)
 	w := bufio.NewWriter(curChunkFile)
 	for i := 0; i < numRows; i++ {
