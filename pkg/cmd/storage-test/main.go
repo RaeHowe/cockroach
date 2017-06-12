@@ -252,7 +252,8 @@ func startChunkSort(chunkNum int, chunkPath string, tmpPath string, memLimitMB i
 
 	if err := stopper.RunLimitedAsyncTask(context.TODO(), sem, true, /* wait */
 		func(context.Context) {
-			time.Sleep(2 * time.Second())
+			// !!!
+			time.Sleep(2 * time.Second)
 			// !!!
 			// cmd := exec.Command("sort",
 			//   "-S", fmt.Sprintf("%dM", memLimitMB),
