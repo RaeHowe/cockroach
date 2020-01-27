@@ -75,11 +75,18 @@ func (s *Store) Send(
 		}
 	}
 
-	if ba.Txn != nil && ba.Txn.ReadTimestamp.IsEmpty() {
+	if ba.Txn != nil && ba.Txn.ReadTimestamp.Less(ba.Txn.DeprecatedOrigTimestamp) {
 		// For compatibility with 19.2 nodes which might not have set ReadTimestamp,
-		// fallback to DeprecatedOrigTimestamp.
+		// fallback to DeprecatedOrigTimestamp. Note that even if ReadTimestamp is
+		// set, it might still be less than DeprecatedOrigTimestamp if the txn was
+		// restarted.
 		ba.Txn = ba.Txn.Clone()
 		ba.Txn.ReadTimestamp = ba.Txn.DeprecatedOrigTimestamp
+	} else if ba.Txn != nil {
+		if ba.Txn.ReadTimestamp.Less(ba.Txn.DeprecatedOrigTimestamp) {
+			log.Fatalf(ctx, "ba.Txn.ReadTimestamp < OrigTimestamp (%s < %s). ba: %s, txn: %s",
+				ba.Txn.ReadTimestamp, ba.Txn.DeprecatedOrigTimestamp, ba, ba.Txn)
+		}
 	}
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
 		return nil, roachpb.NewError(err)

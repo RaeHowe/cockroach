@@ -361,6 +361,10 @@ func evaluateBatch(
 			log.Fatalf(ctx, "br.Txn.ReadTimestamp < ba.Timestamp (%s < %s). ba: %s",
 				br.Txn.ReadTimestamp, baHeader.Timestamp, ba)
 		}
+		if br.Txn.ReadTimestamp.Less(br.Txn.DeprecatedOrigTimestamp) {
+			log.Fatalf(ctx, "br.Txn.ReadTimestamp < OrigTimestamp (%s < %s). ba: %s",
+				br.Txn.ReadTimestamp, br.Txn.DeprecatedOrigTimestamp, ba)
+		}
 		br.Timestamp = br.Txn.ReadTimestamp
 	} else {
 		br.Timestamp = baHeader.Timestamp
